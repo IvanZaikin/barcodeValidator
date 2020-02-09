@@ -1,81 +1,117 @@
+const ruleMessages = Object.freeze({
+    TOO_SHORT_DATA: barcodeType => `barcode in ${barcodeType} format could not be printed because length of data is less than that supported by the format`,
+    UNSUPPORTED_SYMBOL: barcodeType => `barcode in ${barcodeType} format could not be printed because data contains unsupported symbol(s)`,
+    NON_NUMERIC: barcodeType => `barcode in ${barcodeType} format could not be printed for non-numeric data`,
+    UNSUPPORTED_BARCODE: barcodeType => `barcode in ${barcodeType} format could not be ptinted because the format is unsupported`,
+});
+
+const barcodes = Object.freeze({
+    CODE39: 'CODE39',
+    EAN13: 'EAN13',
+    EAN8: 'EAN8',
+});
+
 class BarcodeDataValidator {
     static validate(barcodeType, data) {
         const rules = this.getBarcodeRules(barcodeType);
 
         if (!rules) {
-            return this.getNotSupportedBarcodeResult(barcodeType);
+            return this.fail(`barcode in ${barcodeType} format could not be ptinted because the format is unsupported`);
         }
 
-        const conditions = this.getConditionsByRules(rules);
-
-        return this.checkConditions(conditions, data);
+        return this.checkRules(rules, data);
     }
 
-    static getNotSupportedBarcodeResult(notSupportedBarcodeType) {
-        return {
-            isValid: false,
-            message: `barcode in ${notSupportedBarcodeType} format is not supported`
-        }
-    }
-
-    static getConditionsByRules({ isNonNumericAvailable, maxLength }) {
-        return (
-            [
-                {
-                    check: data => isNonNumericAvailable || this.isNumeric(data),
-                    geMessage: () => {},
-                },
-                {
-                    check: data => this.isDataLengthLessOrEqual(data, maxLength),
-                    geMessage: () => {},
-                }
-            ]
-        );
-    }
+    // STATIC RULES
 
     static getBarcodeRules(barcodeType) {
         const rulesByType =
         {
-            'CODE39': {
-                isNonNumericAvailable: true,
-                maxLength: 39
-            },
-            'EAN13': {
-                isNonNumericAvailable: false,
-                maxLength: 12
-            },
-            'EAN8': {
-                isNonNumericAvailable: false,
-                maxLength: 7
-            }
+            [barcodes.CODE39]: [
+                {
+                    check: strData => this.isNonEmptyString(data),
+                    getMessage: () => ruleMessages.TOO_SHORT_DATA(barcodeType),
+                },
+                {
+                    check: strData => this.isCode39String(strData),
+                    getMessage: () => ruleMessages.UNSUPPORTED_SYMBOL(barcodeType),
+                },
+            ], 
+            [barcodes.EAN13]: [
+                {
+                    check: strData => this.isStringOfLength(data, 12),
+                    getMessage: () => ruleMessages.TOO_SHORT_DATA(barcodeType),
+                },
+                {
+                    check: strData => this.isNumericString(data),
+                    getMessage: () => ruleMessages.NON_NUMERIC(barcodeType),
+                }
+            ],
+            [barcodes.EAN8]: [
+                {
+                    check: strData => isStringOfLength(data, 7),
+                    getMessage: () => ruleMessages.TOO_SHORT_DATA(barcodeType),
+                },
+                {
+                    check: strData => this.isNumericString(data),
+                    getMessage: () => ruleMessages.NON_NUMERIC(barcodeType),
+                }
+            ]
         };
 
         return rulesByType[barcodeType];
     }
 
-    static checkConditions(conditions, data) {
-        for (let condition of conditions) {
-            if (!condition.check(data)) {
-                return {
-                    isValid: false,
-                    message: condition.getMessage(),
-                }
+    static checkRules(rules, data) {
+        for (let rule of rules) {
+            if (!rule.check(data)) {
+                return this.fail(rule.getMessage());
             }
         }
+        return this.success();
+    }
+
+    // RESULT UTILS
+
+    static success() {
+        return this.result(true);
+    }
+
+    static fail(message) {
+        return this.result(false, message);
+    }
+
+    static result(isValid, message) {
         return {
-            isValid: true
+            isValid,
+            ...message && {
+                message
+            }
         }
     }
 
-    static isNumeric(data) {
+
+    // STRING UTILS
+
+    static isNumericString(data) {
         return /^\d+$/.test(data);
     }
 
-    static isDataLengthLessOrEqual(data, maxLength) {
-        return !!data && data.length <= maxLength;
+    static isStringOfLength(data, length) {
+        return typeof data === 'string' && data.length === length;
     }
 
-    static isDataLengthEqual(data, fixedLength) {
-        return !!data && data.length === fixedLength;
+    static isCode39String(data) {
+        return /^[A-Z0-9\x20.$/+%-]+$/.test(data);
+    }
+
+    static isNonEmptyString(data) {
+        return typeof data === 'string' && !!data;
     }
 }
+
+
+const barCode = 'CODE39';
+const data = 'ABC-123';
+
+console.log(BarcodeDataValidator.validate(barCode, data));
